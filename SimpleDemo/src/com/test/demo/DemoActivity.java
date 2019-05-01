@@ -169,6 +169,16 @@ public class DemoActivity extends Activity {
     private boolean m_bSaveRealData = false;
     private boolean m_bStopPlayback = false;
 
+    public static Context getContext() {
+        return context;
+    }
+
+    public void setContext(Context context) {
+        this.context = context;
+    }
+
+    public static Context context;
+
     //Socket
     private BufferedReader m_dDataIn = null;
     private com.github.nkzawa.socketio.client.Socket m_sSocket = null;
@@ -208,40 +218,8 @@ public class DemoActivity extends Activity {
 
         setM_iStartChan(Integer.valueOf(m_oCam.getText().toString()) - 1);
 
-        //TODO CANNOT SETUP Socket, to much data to be processed in each request
-//        try {
-//            String result = executeThroughSocket(Integer.valueOf(m_oPort.getText().toString()), m_oIPAddr.getText().toString());
-//
-//            Data data = gson.fromJson(result, Data.class);
-//
-//            m_oIPAddr.setText(data.getIP());
-//            m_oPort.setText(data.getPort());
-//            m_oDate.setText(data.getDate());
-
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-
-        /*IO.Options options = new IO.Options();
-        options.port = Integer.valueOf(m_oPort.getText().toString());
-        try {
-            m_sSocket = IO.socket("http://" + m_oIPAddr.getText().toString(), options);
-
-            // Receiving an object
-            m_sSocket.on("EyeSon", new Emitter.Listener() {
-                @Override
-                public void call(Object... args) {
-                    JSONObject obj = (JSONObject)args[0];
-                    String s = obj.toString();
-                }
-            });
-
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
-        }
-*/
-       // SetSocket(m_oIPAddr.getText().toString(), Integer.valueOf(m_oPort.getText().toString()));
-
+        Client client = new Client(m_oIPAddr.getText().toString(), Integer.valueOf(m_oPort.getText().toString()), m_oTime);
+        client.execute();
     }
 
     private void SetSocket(String IP, int m_iPort)
