@@ -13,11 +13,13 @@ import android.app.DatePickerDialog;
 import android.app.Dialog;
 import android.app.TimePickerDialog;
 import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.text.format.Formatter;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
@@ -30,6 +32,7 @@ import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.TimePicker;
 import android.widget.Toast;
 
@@ -52,10 +55,14 @@ import java.io.BufferedReader;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Enumeration;
 
 
 /**
@@ -84,6 +91,7 @@ public class DemoActivity extends Activity {
     private EditText m_oCam = null;
     private EditText m_oDate = null;
     private EditText m_oTime = null;
+    private TextView m_IPAdrs = null;
     private TimePicker timePicker;
     private DatePicker datePicker;
     private Calendar calendar;
@@ -180,7 +188,7 @@ public class DemoActivity extends Activity {
     public static Context context;
 
     //Socket
-    private BufferedReader m_dDataIn = null;
+    private String m_dDataIn = null;
     private com.github.nkzawa.socketio.client.Socket m_sSocket = null;
 
     /** Called when the activity is first created. */
@@ -216,17 +224,45 @@ public class DemoActivity extends Activity {
         m_oPsd.setText("2004eyeson");
         m_oCam.setText("1");
 
+        try{
+            String ip = GetIp();
+            //Integer IP = toInt(ip);
+            //m_oCam.setText("" + ip +"");
+            m_IPAdrs.setText(m_IPAdrs.getText() + " " + " Port: 7555");
+        }catch(NumberFormatException ex){ // handle your exception
+            System.out.printf(ex.getMessage());
+        }
+
         setM_iStartChan(Integer.valueOf(m_oCam.getText().toString()) - 1);
 
-        Client client = new Client(m_oIPAddr.getText().toString(), Integer.valueOf(m_oPort.getText().toString()), m_oTime);
-        client.execute();
-    }
+       /* Client client = new Client(m_oIPAddr.getText().toString(), Integer.valueOf(m_oPort.getText().toString()), m_oTime);
+        client.execute();*/
 
-    private void SetSocket(String IP, int m_iPort)
+        SocketInitializer server = new SocketInitializer();
+        server.execute(7555);
+
+    }
+    public static int toInt(String dottedDecimal) {
+        int byte1 = 0;
+        int value = 0;
+        for (char c : dottedDecimal.toCharArray()) {
+            if (c != '.') {
+                byte1 = 10 * byte1 + (c - '0');
+            } else {
+                value <<= 8;
+                value += byte1;
+                byte1 = 0;
+            }
+        }
+        value <<= 8;
+        value += byte1;
+        return value;
+    }
+  /*  private void SetSocket(String IP, int m_iPort)
     {
         new SocketClient().execute(IP, String.valueOf(m_iPort));
     }
-
+*/
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         outState.putInt("m_iPort", m_iPort);
@@ -343,6 +379,8 @@ public class DemoActivity extends Activity {
         m_oCam = (EditText) findViewById(R.id.EDT_Cam);
         m_oDate = (EditText) findViewById(R.id.EDT_Date);
         m_oTime = (EditText) findViewById(R.id.EDT_Hr);
+        m_IPAdrs = (TextView) findViewById(R.id.ipPlaceHolder);
+
     }
 
     // listen
@@ -1232,6 +1270,24 @@ public class DemoActivity extends Activity {
         return iLogID;
     }
 
+    private String GetIp(){
+        try {
+            for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces();
+                 en.hasMoreElements();) {
+                NetworkInterface intf = en.nextElement();
+                for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements();) {
+                    InetAddress inetAddress = enumIpAddr.nextElement();
+                    if (!inetAddress.isLoopbackAddress()) {
+                        return inetAddress.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            Log.e("IP Address", ex.toString());
+        }
+        return null;
+    }
+
     /**
      * @fn paramCfg
      * @author zhuzhenlei
@@ -1303,68 +1359,68 @@ public class DemoActivity extends Activity {
         // release net SDK resource
         HCNetSDK.getInstance().NET_DVR_Cleanup();
     }
-    public String executeThroughSocket(int portNo, String portAddress) throws IOException {
+    public String setUpSocket(int portNo) throws IOException {
 
-        StringBuilder responseString = new StringBuilder();
+        String responseString = null;
 
         BufferedReader bufferedReader = null;
+        ServerSocket serverSocket;
         Socket clientSocket = null;
 
         try {
-            clientSocket = new Socket(portAddress, portNo);
-            if (!clientSocket.isConnected())
-                throw new SocketException("Could not connect to Socket");
-
-            clientSocket.setKeepAlive(true);
+            serverSocket = new ServerSocket(portNo);
+            clientSocket = serverSocket.accept();
 
             bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             String str;
-            while ((str = bufferedReader.readLine()) != null) {
-                responseString.append(str);
-            }
 
-        } finally {
-            if (bufferedReader != null)
-                bufferedReader.close();
-            if (clientSocket != null)
-                clientSocket.close();
+            str = bufferedReader.readLine();
+
+            responseString = str;
+
+            return responseString;
+            } catch (Exception e) {
         }
-        return responseString.toString();
+        return responseString;
     }
-    public class SocketClient extends AsyncTask<String, Void, BufferedReader> {
+    public class SocketInitializer extends AsyncTask<Integer, Void, String> {
 
-        private Socket socket = null;
-        private BufferedReader dataInComing = null;
+        String responseString = null;
 
-        StringBuilder responseString = new StringBuilder();
+        public String setUpSocket(int portNo) {
 
-        public BufferedReader SetConnection(String ip, int port){
+            String responseString = null;
+
+            BufferedReader bufferedReader = null;
+            ServerSocket serverSocket;
+            Socket clientSocket = null;
 
             try {
+                serverSocket = new ServerSocket(portNo);
+                clientSocket = serverSocket.accept();
 
-                socket = new Socket(ip, port);
+                bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                String str;
 
-                if(!socket.isConnected())
-                    throw  new SocketException("Could not connect to Socket");
+                str = bufferedReader.readLine();
 
-                dataInComing = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                responseString = str;
 
-                return dataInComing;
-            } catch (IOException e) {
-                e.printStackTrace();
+                return responseString;
+            } catch (Exception e) {
             }
-            return null;
+            return responseString;
         }
 
         @Override
-        protected BufferedReader doInBackground(String... strings) {
-            SetConnection(strings[0], Integer.valueOf(strings[1]));
-            return dataInComing;
+        protected String doInBackground(Integer... port) {
+            String response = setUpSocket(port[0]);
+            return response;
         }
 
         @SuppressWarnings("deprecation")
         @Override
-        protected void onPostExecute(BufferedReader dataInComing) {
+        protected void onPostExecute(String dataInComing) {
             super.onPostExecute(dataInComing);
             if (dataInComing == null) {
                 return;
@@ -1374,14 +1430,10 @@ public class DemoActivity extends Activity {
             try {
 //                String data = m_dDataIn.readLine();
 //                JSONObject json = new JSONObject(m_dDataIn.readUTF());
-                String str;
-                while ((str = m_dDataIn.readLine()) != null) {
-                    responseString.append(str);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+                //String str;
+
             } finally {
-                if (m_dDataIn != null) {
+               /* if (m_dDataIn != null) {
                     try {
                         m_dDataIn.close();
                     } catch (IOException e) {
@@ -1394,8 +1446,9 @@ public class DemoActivity extends Activity {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-                }
+                }*/
             }
         }
     }
+
 }
