@@ -50,6 +50,7 @@ import com.hikvision.netsdk.PTZCommand;
 import com.hikvision.netsdk.PlaybackControlCommand;
 
 import org.MediaPlayer.PlayM4.Player;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.FileOutputStream;
@@ -60,9 +61,15 @@ import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Enumeration;
+import java.util.Locale;
+import java.util.TimeZone;
 
 
 /**
@@ -218,22 +225,22 @@ public class DemoActivity extends Activity {
 
         //TODO COMPLETE PENDING CHANGES.
 
-        m_oIPAddr.setText("50.78.124.78");
+     /*   m_oIPAddr.setText("50.78.124.78");
         m_oPort.setText("8001");
         m_oUser.setText("eyeson");
         m_oPsd.setText("2004eyeson");
-        m_oCam.setText("1");
+        m_oCam.setText("");*/
 
         try{
             String ip = GetIp();
             //Integer IP = toInt(ip);
             //m_oCam.setText("" + ip +"");
-            m_IPAdrs.setText(m_IPAdrs.getText() + " " + " Port: 7555");
+            m_IPAdrs.setText(m_IPAdrs.getText() + ":" + ip + " Port: 7555");
         }catch(NumberFormatException ex){ // handle your exception
             System.out.printf(ex.getMessage());
         }
 
-        setM_iStartChan(Integer.valueOf(m_oCam.getText().toString()) - 1);
+        //setM_iStartChan(Integer.valueOf(m_oCam.getText().toString()) - 1);
 
        /* Client client = new Client(m_oIPAddr.getText().toString(), Integer.valueOf(m_oPort.getText().toString()), m_oTime);
         client.execute();*/
@@ -705,6 +712,10 @@ public class DemoActivity extends Activity {
          NET_DVR_TIME struBegin = new NET_DVR_TIME();
          NET_DVR_TIME struEnd = new NET_DVR_TIME();
 
+         SimpleDateFormat formatter= new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+         Date date = new Date(System.currentTimeMillis());
+         formatter.format(date);
+
          struBegin.dwYear = getYear();
          struBegin.dwMonth = getMonth();
          struBegin.dwDay = getDay();
@@ -712,12 +723,12 @@ public class DemoActivity extends Activity {
          struBegin.dwMinute= getMinute();
          struBegin.dwSecond = 00;
 
-         struEnd.dwYear = 2019;
-         struEnd.dwMonth = 4;
-         struEnd.dwDay = 26;
-         struEnd.dwHour = 10;
-         struEnd.dwMinute= 48;
-         struEnd.dwSecond = 20;
+         struEnd.dwYear = formatter.getCalendar().getTime().getYear() - 100 + 2000;
+         struEnd.dwMonth = formatter.getCalendar().getTime().getMonth() + 1;
+         struEnd.dwDay = formatter.getCalendar().getTime().getDay() + 1;
+         struEnd.dwHour = formatter.getCalendar().getTime().getHours();
+         struEnd.dwMinute= formatter.getCalendar().getTime().getMinutes();
+         struEnd.dwSecond = 00;
 
          NET_DVR_VOD_PARA struVod = new NET_DVR_VOD_PARA();
          struVod.struBeginTime = struBegin;
@@ -1400,14 +1411,27 @@ public class DemoActivity extends Activity {
                 clientSocket = serverSocket.accept();
 
                 bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+                String headerLine = null;
+                while((headerLine = bufferedReader.readLine()).length() != 0){
+                    System.out.println(headerLine);
+                }
+
+                StringBuilder payload = new StringBuilder();
+                while(bufferedReader.ready()){
+                    payload.append((char) bufferedReader.read());
+                }
+                System.out.println("Payload data is: "+payload.toString());
+
                 String str;
 
-                str = bufferedReader.readLine();
+                str = payload.toString();
 
                 responseString = str;
 
                 return responseString;
             } catch (Exception e) {
+                System.out.print(e.getMessage());
             }
             return responseString;
         }
@@ -1422,33 +1446,93 @@ public class DemoActivity extends Activity {
         @Override
         protected void onPostExecute(String dataInComing) {
             super.onPostExecute(dataInComing);
-            if (dataInComing == null) {
-                return;
-            }
-            m_dDataIn = dataInComing;
-
-            try {
-//                String data = m_dDataIn.readLine();
-//                JSONObject json = new JSONObject(m_dDataIn.readUTF());
-                //String str;
-
-            } finally {
-               /* if (m_dDataIn != null) {
-                    try {
-                        m_dDataIn.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                if (dataInComing == null) {
+                    return;
                 }
-                if (socket != null) {
-                    try {
-                        socket.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }*/
+
+                m_dDataIn = dataInComing;
+
+                Data data = new Gson().fromJson(m_dDataIn, Data.class);
+
+                try
+                {
+                    m_oCam.setText(String.valueOf(data.getCamera()));
+                    m_oIPAddr.setText(String.valueOf(data.getIP()));
+                    m_oPort.setText(String.valueOf(data.getPort()));
+                    m_oUser.setText(String.valueOf(data.getUsername()));
+                    m_oPsd.setText(String.valueOf(data.getPassword()));
+                    ParseDate(data.getDate());
+
+                    m_oTime.setText(new StringBuilder().append(getHour()).append(":")
+                            .append(getMinute()));
+
+                    m_oDate.setText(new StringBuilder().append(getDay()).append("/")
+                            .append(getMonth()).append("/").append(getYear()));
+
+                }catch (NumberFormatException ex){ // handle your exception
+                    System.out.printf(ex.getMessage());
+                } catch (ParseException e) {
+                    e.printStackTrace();
+                }
+
+            setM_iStartChan(Integer.valueOf(m_oCam.getText().toString()) - 1);
+
+                Toast.makeText(getApplicationContext(), "PRESS LOGIN THEN PREVIEW", Toast.LENGTH_LONG).show();
+
             }
+
+        private void ParseDate(String DATE) throws ParseException {
+
+            SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+            SimpleDateFormat outputFormat = new SimpleDateFormat("dd/MM/yyyy");
+/*            DATE d = new DATE();
+            d.SetInstance(outputFormat);*/
+
+            Date date = inputFormat.parse(DATE);
+            Calendar calendar = Calendar.getInstance(TimeZone.getDefault());
+            calendar.setTime(date);
+
+            setHour(calendar.get(Calendar.HOUR));
+            setMinute(calendar.get(Calendar.MINUTE));
+            setMonth(calendar.get(Calendar.MONTH) + 1);
+            setYear(calendar.get(Calendar.YEAR));
+            setDay(calendar.get(Calendar.DAY_OF_MONTH));
+            //String formattedDate =
         }
+
     }
 
+    public static class DATE{
+
+        public static SimpleDateFormat getSP() {
+            return SP;
+        }
+
+        public static void setSP(SimpleDateFormat SP) {
+            DATE.SP = SP;
+        }
+
+        private static SimpleDateFormat SP;
+
+        public static SimpleDateFormat Instance(){
+            if (SP == null){
+                setSP(new SimpleDateFormat());
+                return getSP();
+            }
+            return getSP();
+        }
+
+        public static SimpleDateFormat SetInstance(SimpleDateFormat res)
+        {
+            SP = res;
+
+            return SP;
+        }
+
+        public static void SetIntanceToNull()
+        {
+            SP = null;
+        }
+
+    }
 }
